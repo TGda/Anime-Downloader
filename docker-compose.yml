@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  anime-downloader:
+    build: .
+    container_name: Anime-Downloader
+    ports:
+      - "5000:5000"
+    volumes:
+      - ${DOWNLOADF}:/downloads   # Aquí DOWNLOADF es la ruta HOST
+    environment:
+      - DOWNLOAD_FOLDER=/downloads
+      - PARALLEL_DOWNLOADS=${DOWNLOADS}
+    restart: unless-stopped
