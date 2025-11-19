@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>{{ serie.title }} - Download</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="centered">
+        <h2>{{ serie.title }}</h2>
+        {% if serie.img_url %}
+            <img src="{{ serie.img_url }}" alt="Series Image" style="max-width:300px;">
+        {% endif %}
+        <form id="downloadForm">
+            <input type="hidden" name="url" value="{{ url }}">
+            <input type="hidden" name="folder" value="{{ folder }}">
+            <input type="hidden" name="parallel" value="{{ parallel }}">
+            <h3>Select Episodes to Download:</h3>
+            {% for s, episodes in serie.seasons.items() %}
+                <h4>Season {{ s }}</h4>
+                {% for ep in episodes %}
+                    <label>
+                        <input type="checkbox" name="episodes" value="{{ ep.link }}" {% if ep.downloaded %} disabled checked {% endif %}>
+                        {{ ep.name }} {% if ep.downloaded %}(Already downloaded){% endif %}
+                    </label><br>
+                {% endfor %}
+            {% endfor %}
+            <br>
+            <button type="button" onclick="startDownload()">Download Selected</button>
+        </form>
+        <div id="responseBox"></div>
+    </div>
+
+    <script>
+    function startDownload() {
+        const form = document.getElementById('downloadForm');
+        const data = {
+            url: form.url.value,
+            folder: form.folder.value,
+            parallel: Number(form.parallel.value),
+            episodes: Array.from(form.querySelectorAll('input[name="episodes"]:checked')).map(e => e.value)
+        };
+        fetch("/download", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data)})
+            .then(r=>r.json()).then(resp=>{
+                document.getElementById("responseBox").innerHTML = "Download started: "+JSON.stringify(resp);
+            });
+    }
+    </script>
+</body>
+</html>
