@@ -4,8 +4,8 @@ from scraping.scraper import scrape_anime_data, download_selected_episodes
 
 app = Flask(__name__)
 
-DOWNLOAD_ROOT_DEFAULT = "/downloads"
-PARALLEL_DEFAULT = 2
+DOWNLOAD_ROOT_DEFAULT = os.getenv("DOWNLOAD_FOLDER", "/downloads")
+PARALLEL_DEFAULT = int(os.getenv("PARALLEL_DOWNLOADS", 2))
 
 # Home page for URL input
 @app.route("/", methods=["GET", "POST"])
