@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Anime Downloader</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="centered">
+        <h1>Anime Downloader</h1>
+        <form method="POST">
+            <input type="text" name="url" placeholder="Paste series URL here..." required>
+            <br>
+            <label>Download Folder:</label>
+            <input type="text" name="dest" value="/downloads">
+            <br>
+            <label>Parallel Downloads:</label>
+            <input type="number" name="parallel" value="2" min="1" max="10">
+            <br>
+            <button type="submit">Process</button>
+        </form>
+    </div>
+</body>
+</html>
