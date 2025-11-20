@@ -8,6 +8,23 @@
             background: url('/static/background.png') center center fixed no-repeat;
             background-size: cover;
         }
+        .blinking {
+            animation: blinkingText 1s infinite;
+            color: #2358f2 !important;
+            font-weight: bold;
+        }
+        @keyframes blinkingText {
+            0% { opacity: 1; }
+            50% { opacity: 0.2; }
+            100% { opacity: 1; }
+        }
+        .downloaded {
+            color: #23f242 !important;
+            font-weight: bold;
+        }
+        .disabled-check {
+            filter: grayscale(1);
+        }
     </style>
 </head>
 <body>
@@ -31,15 +48,16 @@
                         {% for ep in episodes %}
                             <label>
                                 <input type="checkbox" name="episodes" value="{{ep.link}}" data-season="{{s}}"
-                                    {% if ep.downloaded %}disabled checked{% endif %}>
-                                {{ep.name}}
-                                {% if ep.downloaded %}(Already downloaded){% endif %}
+                                    {% if ep.downloaded %}disabled checked class="disabled-check"{% endif %}>
+                                <span {% if ep.downloaded %}class="downloaded"{% endif %} id="ep_{{ loop.index0 }}_{{ s|replace(' ','_') }}">
+                                    {{ep.name}}
+                                </span>
                             </label><br>
                         {% endfor %}
                     </div>
                 </div>
             {% endfor %}
-            <button type="button" onclick="startDownload()">Download Selected</button>
+            <button type="button" onclick="startDownload()" id="downloadBtn">Download Selected</button>
         </form>
         <div id="responseBox" style="margin-top:18px;"></div>
     </div>
@@ -59,17 +77,52 @@
             parallel: Number(form.parallel.value),
             episodes: Array.from(form.querySelectorAll('input[name="episodes"]:checked')).map(e => e.value)
         };
-        document.getElementById("responseBox").innerHTML = "Procesando capítulo(s):<br><pre>"+JSON.stringify(data.episodes, null, 2)+"</pre>";
+        // Estado visual: pone episodios en estado "DESCARGANDO" azul y blinking
+        let i = 0;
+        data.episodes.forEach(function(epUrl){
+            let idx = Array.from(form.querySelectorAll('input[name="episodes"]')).findIndex(x=>x.value==epUrl);
+            let s = form.querySelectorAll('input[name="episodes"]:checked')[i].getAttribute('data-season');
+            let elid = "ep_" + idx + "_" + s.replace(/ /g,'_');
+            let span = document.getElementById(elid);
+            if(span){
+                span.classList.remove("downloaded");
+                span.classList.add("blinking");
+                span.style.color = "#2358f2";
+                span.style.fontWeight = "bold";
+            }
+            i++;
+        });
+        document.getElementById("responseBox").innerHTML = `<b>Descargando selección:</b><br><ul id="fileList"></ul>`;
+        // Realiza la petición
         fetch("/download", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data)})
             .then(r=>r.json()).then(resp=>{
-                document.getElementById("responseBox").innerHTML = "<b>Resultado:</b><br><pre>"+JSON.stringify(resp, null, 2)+"</pre>";
+                // Finaliza estado visual
+                data.episodes.forEach(function(epUrl){
+                    let idx = Array.from(form.querySelectorAll('input[name="episodes"]')).findIndex(x=>x.value==epUrl);
+                    let s = form.querySelectorAll('input[name="episodes"]:checked')[i-1].getAttribute('data-season');
+                    let elid = "ep_" + idx + "_" + s.replace(/ /g,'_');
+                    let span = document.getElementById(elid);
+                    if(span){
+                        span.classList.remove("blinking");
+                        span.classList.add("downloaded");
+                        span.style.color = "#23f242";
+                        span.style.fontWeight = "bold";
+                    }
+                });
+                // Actualiza log de archvos descargados
+                document.getElementById("responseBox").innerHTML += `<b>Finalizado:</b><br>
+                <ul>${
+                  (resp.downloaded||[]).map(f=>`<li style='color:#23f242;font-weight:bold'>${f.split('/').pop()}</li>`).join('')
+                }</ul>
+                ${(resp.errors && resp.errors.length>0 ? `<b>Errores:</b>`:"")+ resp.errors.map(e=>`<li style='color:#f23b23;font-weight:bold'>${e[0].split('/').pop()} (${e[1]})</li>`).join('')}
+                `;
             });
     }
     document.addEventListener('DOMContentLoaded', function(){
         document.getElementById("responseBox").innerHTML = "<b>La lista de capítulos se está generando, por favor espera...</b>";
         setTimeout(function(){
             document.getElementById("responseBox").innerHTML = "";
-        }, 2000);
+        }, 1000);
     });
     </script>
 </body>
