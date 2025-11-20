@@ -16,14 +16,13 @@ def guess_season_from_url_or_title(url, node=None):
         m = re.search(r'Season[^\d]?(\d+)', node.text if hasattr(node, "text") else node, re.I)
     return m.group(1) if m else "1"
 
-def find_mp4s_recursive(url, download_root, season_hint=None):
+def find_mp4s_recursive(url, serie_root, season_hint=None):
     try:
         resp = requests.get(url)
         soup = BeautifulSoup(resp.text, "html.parser")
     except Exception as e:
         print(f"Error accediendo {url}: {e}")
         return dict()
-    # Buscar mp4 en esta página
     mp4_links = [
         a for a in soup.find_all("a", href=re.compile(r"\.mp4$", re.I))
         if a and a.has_attr("href")
@@ -34,15 +33,14 @@ def find_mp4s_recursive(url, download_root, season_hint=None):
         for ep in mp4_links:
             ep_url = urljoin(url, ep['href'])
             ep_file = clean_filename(ep_url.split('/')[-1])
-            ep_name = ep_file  # Usa el nombre del archivo mp4
-            dest = os.path.join(download_root, f"Season {season}", ep_file)
+            ep_name = ep_file
+            dest = os.path.join(serie_root, f"Season {season}", ep_file)
             episode_list.append({
                 "name": ep_name,
                 "link": ep_url,
                 "downloaded": os.path.exists(dest)
             })
         return {season: episode_list}
-    # Buscar folders para navegar recursivo
     folder_links = [
         a for a in soup.find_all("a", href=True)
         if not a['href'].endswith(".mp4") and not a['href'].startswith("mailto:")
@@ -53,7 +51,7 @@ def find_mp4s_recursive(url, download_root, season_hint=None):
     for folder in folder_links:
         folder_url = urljoin(url, folder['href'])
         this_season = guess_season_from_url_or_title(folder_url, folder)
-        data = find_mp4s_recursive(folder_url, download_root, this_season)
+        data = find_mp4s_recursive(folder_url, serie_root, this_season)
         for season, eps in data.items():
             if season not in result:
                 result[season] = []
@@ -67,17 +65,12 @@ def scrape_anime_data(url, download_root="/downloads"):
     except Exception as e:
         print(f"Error accediendo {url}: {e}")
         return {"title":"Error", "img_url":None, "seasons":{}}
-
-    # Extraer nombre de la serie desde <div class="Singamda">
     title_div = soup.find("div", class_="Singamda")
     title = title_div.text.strip() if title_div else (soup.title.text.strip() if soup.title else "Anime Series")
-
     img_el = soup.find("img", {"src": re.compile(r".*\.(jpg|jpeg|png|webp)$", re.I)})
     img_url = urljoin(url, img_el["src"]) if img_el else None
-
     serie_root = os.path.join(download_root, clean_filename(title))
     seasons = find_mp4s_recursive(url, serie_root)
-
     return {
         "title": title,
         "img_url": img_url,
@@ -99,14 +92,23 @@ async def download_file(url, dest):
         return dest, str(e)
 
 def download_selected_episodes(main_url, folder, episodes, parallel=2):
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    # Descarga en la raíz apropiada
+    try:
+        response = requests.get(main_url)
+        soup = BeautifulSoup(response.text, "html.parser")
+    except Exception as e:
+        print(f"Error accediendo {main_url}: {e}")
+    title_div = soup.find("div", class_="Singamda")
+    title = title_div.text.strip() if title_div else (soup.title.text.strip() if soup.title else "Anime Series")
+    serie_root = os.path.join(folder, clean_filename(title))
+    if not os.path.exists(serie_root):
+        os.makedirs(serie_root)
     to_download, skipped = [], []
     for ep_url in episodes:
         ep_file = clean_filename(ep_url.split('/')[-1])
         m = re.search(r'Season[^\d]?(\d+)', ep_url, re.I)
         season_folder = f"Season {m.group(1)}" if m else ""
-        dest = os.path.join(folder, season_folder, ep_file)
+        dest = os.path.join(serie_root, season_folder, ep_file)
         if os.path.exists(dest):
             skipped.append(dest)
         else:
