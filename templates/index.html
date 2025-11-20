@@ -3,6 +3,12 @@
 <head>
     <title>Anime Downloader</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body {
+            background: url('/static/background.png') center center fixed no-repeat;
+            background-size: cover;
+        }
+    </style>
 </head>
 <body>
     <div class="centered">
@@ -16,8 +22,14 @@
             <label>Parallel Downloads:</label>
             <input type="number" name="parallel" value="2" min="1" max="10">
             <br>
-            <button type="submit">Process</button>
+            <button type="submit" id="processBtn">Process</button>
         </form>
+        <div id="scrappingLabel" style="display:none; font-weight:bold; color:blue; font-size:20px;">SCRAPPING...</div>
     </div>
+    <script>
+    document.querySelector('form').addEventListener('submit', function(){
+        document.getElementById('scrappingLabel').style.display = 'block';
+    });
+    </script>
 </body>
 </html>
