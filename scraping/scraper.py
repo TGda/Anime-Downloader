@@ -23,7 +23,6 @@ def find_mp4s_recursive(url, serie_root, season_hint=None):
     except Exception as e:
         print(f"Error accediendo {url}: {e}")
         return dict()
-    # Buscar mp4 en esta página
     mp4_links = [
         a for a in soup.find_all("a", href=re.compile(r"\.mp4$", re.I))
         if a and a.has_attr("href")
@@ -45,8 +44,7 @@ def find_mp4s_recursive(url, serie_root, season_hint=None):
     folder_links = [
         a for a in soup.find_all("a", href=True)
         if not a['href'].endswith(".mp4") and not a['href'].startswith("mailto:")
-        and ("season" in a.text.lower() or "episode" in a.text.lower() 
-        or bool(re.match(r'[Ss]eason|[Ee]pisode|\d+', a.text)))
+        and ("season" in a.text.lower() or "episode" in a.text.lower() or bool(re.match(r'[Ss]eason|[Ee]pisode|\d+', a.text)))
     ]
     result = {}
     for folder in folder_links:
@@ -72,16 +70,13 @@ def scrape_anime_data(url, download_root="/downloads"):
     img_url = urljoin(url, img_el["src"]) if img_el else None
     serie_root = os.path.join(download_root, clean_filename(title))
     seasons = find_mp4s_recursive(url, serie_root)
-    # Segunda revisión explícita por si hay archivos en disco que se crearon fuera del flujo
-    for season, eps_list in seasons.items():
-        for ep in eps_list:
-            ep_path = os.path.join(serie_root, f"Season {season}", ep["name"])
-            ep["downloaded"] = os.path.exists(ep_path)
     return {
         "title": title,
         "img_url": img_url,
         "seasons": seasons
     }
+
+# download_selected_episodes (sin cambios previos, ya gestiona skip si existe en disco)
 
 async def download_file(url, dest):
     chunk_size = 1024 * 1024
