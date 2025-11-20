@@ -8,27 +8,11 @@
             background: url('/static/background.png') center center fixed no-repeat;
             background-size: cover;
         }
-        .waiting {
-            color: #eee818 !important;
-            font-weight: bold;
-        }
-        .blinking {
-            animation: blinkingText 1s infinite;
-            color: #2358f2 !important;
-            font-weight: bold;
-        }
-        @keyframes blinkingText {
-            0% { opacity: 1; }
-            50% { opacity: 0.2; }
-            100% { opacity: 1; }
-        }
-        .downloaded {
-            color: #23f242 !important;
-            font-weight: bold;
-        }
-        .disabled-check {
-            filter: grayscale(1);
-        }
+        .waiting { color: #eee818 !important; font-weight: bold; }
+        .blinking { animation: blinkingText 1s infinite; color: #2358f2 !important; font-weight: bold; }
+        @keyframes blinkingText { 0% {opacity: 1;} 50% {opacity: 0.2;} 100% {opacity: 1;} }
+        .downloaded { color: #23f242 !important; font-weight: bold; }
+        .disabled-check { filter: grayscale(1); }
     </style>
 </head>
 <body>
@@ -53,7 +37,9 @@
                             <label>
                                 <input type="checkbox" name="episodes" value="{{ep.link}}" data-season="{{s}}"
                                     {% if ep.downloaded %}disabled checked class="disabled-check"{% endif %}>
-                                <span {% if ep.downloaded %}class="downloaded"{% endif %} id="ep_{{ loop.index0 }}_{{ s|replace(' ','_') }}">
+                                <span
+                                    id="ep_{{ loop.index0 }}_{{ s|replace(' ','_') }}"
+                                    {% if ep.downloaded %}class="downloaded"{% endif %}>
                                     {{ep.name}}
                                 </span>
                             </label><br>
@@ -75,19 +61,18 @@
     function setEpisodeState(index, season, state) {
         let elid = "ep_" + index + "_" + season.replace(/ /g,'_');
         let span = document.getElementById(elid);
-        if(span){
-            span.classList.remove("waiting", "blinking", "downloaded");
+        if(span && !span.classList.contains("downloaded")){
+            span.classList.remove("waiting", "blinking");
             span.classList.add(state);
         }
     }
-    // Misma lógica de inicio, sin log textual
     function startDownload() {
         const form = document.getElementById('downloadForm');
         const episodesAll = Array.from(form.querySelectorAll('input[name="episodes"]'));
         const checkedEpisodes = episodesAll.filter(e => e.checked && !e.disabled);
+
         if(checkedEpisodes.length === 0) return;
 
-        // Set states: todos los seleccionados en amarillo, but only those not yet downloaded or disabled
         checkedEpisodes.forEach((epCb, i) => {
             let idx = episodesAll.indexOf(epCb);
             let season = epCb.getAttribute('data-season');
@@ -107,23 +92,21 @@
         })
         .then(r=>r.json())
         .then(resp=>{
-            // Los episodios realmente procesados: blinking azul mientras bajan, luego verde bold
+            // Pinta solo los que realmente acaba de descargar
             resp.downloaded.forEach(filePath => {
                 let fname = filePath.split('/').pop();
                 let found = Array.from(document.querySelectorAll('span')).find(x => x.textContent.trim() === fname);
                 if(found){
-                    found.classList.remove("waiting","blinking");
+                    found.classList.remove("waiting", "blinking");
                     found.classList.add("downloaded");
                 }
             });
-            // Deshabilita permanentemente el checkbox
             resp.downloaded.forEach(filePath => {
                 let fname = filePath.split('/').pop();
                 let check = Array.from(form.querySelectorAll('input[name=\"episodes\"]')).find(x => x.value.endsWith(fname));
                 if(check) check.disabled = true;
             });
         });
-        // Opcional: visual "blinking" durante el fetch para los episodios que realmente están bajando (simple simulación en cliente, pero funcional)
         checkedEpisodes.forEach((epCb, i) => {
             let idx = episodesAll.indexOf(epCb);
             let season = epCb.getAttribute('data-season');
