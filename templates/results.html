@@ -3,6 +3,12 @@
 <head>
     <title>{{ serie.title }} - Download</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body {
+            background: url('/static/background.png') center center fixed no-repeat;
+            background-size: cover;
+        }
+    </style>
 </head>
 <body>
     <div class="centered">
@@ -26,7 +32,8 @@
                             <label>
                                 <input type="checkbox" name="episodes" value="{{ep.link}}" data-season="{{s}}"
                                     {% if ep.downloaded %}disabled checked{% endif %}>
-                                {{ep.name}} {% if ep.downloaded %}(Already downloaded){% endif %}
+                                {{ep.name}}
+                                {% if ep.downloaded %}(Already downloaded){% endif %}
                             </label><br>
                         {% endfor %}
                     </div>
@@ -36,7 +43,6 @@
         </form>
         <div id="responseBox" style="margin-top:18px;"></div>
     </div>
-
     <script>
     function toggleSeason(seasonCheckbox) {
         var season = seasonCheckbox.getAttribute('data-season');
@@ -53,11 +59,18 @@
             parallel: Number(form.parallel.value),
             episodes: Array.from(form.querySelectorAll('input[name="episodes"]:checked')).map(e => e.value)
         };
+        document.getElementById("responseBox").innerHTML = "Procesando capítulo(s):<br><pre>"+JSON.stringify(data.episodes, null, 2)+"</pre>";
         fetch("/download", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data)})
             .then(r=>r.json()).then(resp=>{
-                document.getElementById("responseBox").innerHTML = "<pre>"+JSON.stringify(resp, null, 2)+"</pre>";
+                document.getElementById("responseBox").innerHTML = "<b>Resultado:</b><br><pre>"+JSON.stringify(resp, null, 2)+"</pre>";
             });
     }
+    document.addEventListener('DOMContentLoaded', function(){
+        document.getElementById("responseBox").innerHTML = "<b>La lista de capítulos se está generando, por favor espera...</b>";
+        setTimeout(function(){
+            document.getElementById("responseBox").innerHTML = "";
+        }, 2000);
+    });
     </script>
 </body>
 </html>
