@@ -23,6 +23,7 @@ def find_mp4s_recursive(url, serie_root, season_hint=None):
     except Exception as e:
         print(f"Error accediendo {url}: {e}")
         return dict()
+    # Buscar mp4 en esta página
     mp4_links = [
         a for a in soup.find_all("a", href=re.compile(r"\.mp4$", re.I))
         if a and a.has_attr("href")
@@ -71,6 +72,11 @@ def scrape_anime_data(url, download_root="/downloads"):
     img_url = urljoin(url, img_el["src"]) if img_el else None
     serie_root = os.path.join(download_root, clean_filename(title))
     seasons = find_mp4s_recursive(url, serie_root)
+    # Segunda revisión explícita por si hay archivos en disco que se crearon fuera del flujo
+    for season, eps_list in seasons.items():
+        for ep in eps_list:
+            ep_path = os.path.join(serie_root, f"Season {season}", ep["name"])
+            ep["downloaded"] = os.path.exists(ep_path)
     return {
         "title": title,
         "img_url": img_url,
@@ -92,7 +98,6 @@ async def download_file(url, dest):
         return dest, str(e)
 
 def download_selected_episodes(main_url, folder, episodes, parallel=2):
-    # Descarga en la raíz apropiada
     try:
         response = requests.get(main_url)
         soup = BeautifulSoup(response.text, "html.parser")
