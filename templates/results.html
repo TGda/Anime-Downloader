@@ -63,7 +63,6 @@
             {% endfor %}
             <button type="button" onclick="startDownload()" id="downloadBtn">Download Selected</button>
         </form>
-        <div id="responseBox" style="margin-top:18px;"></div>
     </div>
     <script>
     function toggleSeason(seasonCheckbox) {
@@ -73,62 +72,64 @@
             if (!epCb.disabled) epCb.checked = checked;
         });
     }
+    function setEpisodeState(index, season, state) {
+        let elid = "ep_" + index + "_" + season.replace(/ /g,'_');
+        let span = document.getElementById(elid);
+        if(span){
+            span.classList.remove("waiting", "blinking", "downloaded");
+            span.classList.add(state);
+        }
+    }
+    // Misma lógica de inicio, sin log textual
     function startDownload() {
         const form = document.getElementById('downloadForm');
-        const data = {
-            url: form.url.value,
-            folder: form.folder.value,
-            parallel: Number(form.parallel.value),
-            episodes: Array.from(form.querySelectorAll('input[name="episodes"]:checked:not([disabled])')).map(e => e.value)
-        };
-        // Ver estados para nuevos downloads
-        let idxs = [];
-        data.episodes.forEach(function(epUrl, i){
-            let idx = Array.from(form.querySelectorAll('input[name="episodes"]')).findIndex(x=>x.value==epUrl);
-            let s = form.querySelectorAll('input[name="episodes"]:checked:not([disabled])')[i].getAttribute('data-season');
-            let elid = "ep_" + idx + "_" + s.replace(/ /g,'_');
-            let span = document.getElementById(elid);
-            if(span){
-                span.classList.remove("downloaded");
-                span.classList.remove("waiting");
-                span.classList.remove("blinking");
-                span.classList.add("waiting");
-                span.style.color = "#eee818";
-                span.style.fontWeight = "bold";
-            }
-            form.querySelectorAll('input[name="episodes"]')[idx].disabled = true;
-            idxs.push({i, elid, idx});
+        const episodesAll = Array.from(form.querySelectorAll('input[name="episodes"]'));
+        const checkedEpisodes = episodesAll.filter(e => e.checked && !e.disabled);
+        if(checkedEpisodes.length === 0) return;
+
+        // Set states: todos los seleccionados en amarillo, but only those not yet downloaded or disabled
+        checkedEpisodes.forEach((epCb, i) => {
+            let idx = episodesAll.indexOf(epCb);
+            let season = epCb.getAttribute('data-season');
+            setEpisodeState(idx, season, "waiting");
+            epCb.disabled = true;
         });
-        document.getElementById("downloadBtn").disabled = false;
-        document.getElementById("responseBox").innerHTML = `<b>Descargando selección:</b><br><ul id="fileList"></ul>`;
-        fetch("/download", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data)})
-            .then(r=>r.json()).then(resp=>{
-                // Actualiza estado visual
-                resp.downloaded.forEach(function(filepath){
-                    let fname = filepath.split('/').pop();
-                    let found = Array.from(form.querySelectorAll('span')).find(x => x.textContent.trim() === fname);
-                    if(found){
-                        found.classList.remove("waiting");
-                        found.classList.remove("blinking");
-                        found.classList.add("downloaded");
-                        found.style.color = "#23f242";
-                        found.style.fontWeight = "bold";
-                    }
-                });
-                document.getElementById("responseBox").innerHTML += `<b>Finalizado:</b><br>
-                <ul>${
-                  (resp.downloaded||[]).map(f=>`<li style='color:#23f242;font-weight:bold'>${f.split('/').pop()}</li>`).join('')
-                }</ul>
-                ${(resp.errors && resp.errors.length>0 ? `<b>Errores:</b>`:"")+ resp.errors.map(e=>`<li style='color:#f23b23;font-weight:bold'>${e[0].split('/').pop()} (${e[1]})</li>`).join('')}
-                `;
+
+        fetch("/download", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+                url: form.url.value,
+                folder: form.folder.value,
+                parallel: Number(form.parallel.value),
+                episodes: checkedEpisodes.map(e => e.value)
+            })
+        })
+        .then(r=>r.json())
+        .then(resp=>{
+            // Los episodios realmente procesados: blinking azul mientras bajan, luego verde bold
+            resp.downloaded.forEach(filePath => {
+                let fname = filePath.split('/').pop();
+                let found = Array.from(document.querySelectorAll('span')).find(x => x.textContent.trim() === fname);
+                if(found){
+                    found.classList.remove("waiting","blinking");
+                    found.classList.add("downloaded");
+                }
             });
+            // Deshabilita permanentemente el checkbox
+            resp.downloaded.forEach(filePath => {
+                let fname = filePath.split('/').pop();
+                let check = Array.from(form.querySelectorAll('input[name=\"episodes\"]')).find(x => x.value.endsWith(fname));
+                if(check) check.disabled = true;
+            });
+        });
+        // Opcional: visual "blinking" durante el fetch para los episodios que realmente están bajando (simple simulación en cliente, pero funcional)
+        checkedEpisodes.forEach((epCb, i) => {
+            let idx = episodesAll.indexOf(epCb);
+            let season = epCb.getAttribute('data-season');
+            setTimeout(() => setEpisodeState(idx, season, "blinking"), 200);
+        });
     }
-    document.addEventListener('DOMContentLoaded', function(){
-        document.getElementById("responseBox").innerHTML = "<b>La lista de capítulos se está generando, por favor espera...</b>";
-        setTimeout(function(){
-            document.getElementById("responseBox").innerHTML = "";
-        }, 1000);
-    });
     </script>
 </body>
 </html>
