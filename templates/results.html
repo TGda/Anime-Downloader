@@ -8,6 +8,10 @@
             background: url('/static/background.png') center center fixed no-repeat;
             background-size: cover;
         }
+        .waiting {
+            color: #eee818 !important;
+            font-weight: bold;
+        }
         .blinking {
             animation: blinkingText 1s infinite;
             color: #2358f2 !important;
@@ -75,41 +79,42 @@
             url: form.url.value,
             folder: form.folder.value,
             parallel: Number(form.parallel.value),
-            episodes: Array.from(form.querySelectorAll('input[name="episodes"]:checked')).map(e => e.value)
+            episodes: Array.from(form.querySelectorAll('input[name="episodes"]:checked:not([disabled])')).map(e => e.value)
         };
-        // Estado visual: pone episodios en estado "DESCARGANDO" azul y blinking
-        let i = 0;
-        data.episodes.forEach(function(epUrl){
+        // Ver estados para nuevos downloads
+        let idxs = [];
+        data.episodes.forEach(function(epUrl, i){
             let idx = Array.from(form.querySelectorAll('input[name="episodes"]')).findIndex(x=>x.value==epUrl);
-            let s = form.querySelectorAll('input[name="episodes"]:checked')[i].getAttribute('data-season');
+            let s = form.querySelectorAll('input[name="episodes"]:checked:not([disabled])')[i].getAttribute('data-season');
             let elid = "ep_" + idx + "_" + s.replace(/ /g,'_');
             let span = document.getElementById(elid);
             if(span){
                 span.classList.remove("downloaded");
-                span.classList.add("blinking");
-                span.style.color = "#2358f2";
+                span.classList.remove("waiting");
+                span.classList.remove("blinking");
+                span.classList.add("waiting");
+                span.style.color = "#eee818";
                 span.style.fontWeight = "bold";
             }
-            i++;
+            form.querySelectorAll('input[name="episodes"]')[idx].disabled = true;
+            idxs.push({i, elid, idx});
         });
+        document.getElementById("downloadBtn").disabled = false;
         document.getElementById("responseBox").innerHTML = `<b>Descargando selección:</b><br><ul id="fileList"></ul>`;
-        // Realiza la petición
         fetch("/download", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data)})
             .then(r=>r.json()).then(resp=>{
-                // Finaliza estado visual
-                data.episodes.forEach(function(epUrl){
-                    let idx = Array.from(form.querySelectorAll('input[name="episodes"]')).findIndex(x=>x.value==epUrl);
-                    let s = form.querySelectorAll('input[name="episodes"]:checked')[i-1].getAttribute('data-season');
-                    let elid = "ep_" + idx + "_" + s.replace(/ /g,'_');
-                    let span = document.getElementById(elid);
-                    if(span){
-                        span.classList.remove("blinking");
-                        span.classList.add("downloaded");
-                        span.style.color = "#23f242";
-                        span.style.fontWeight = "bold";
+                // Actualiza estado visual
+                resp.downloaded.forEach(function(filepath){
+                    let fname = filepath.split('/').pop();
+                    let found = Array.from(form.querySelectorAll('span')).find(x => x.textContent.trim() === fname);
+                    if(found){
+                        found.classList.remove("waiting");
+                        found.classList.remove("blinking");
+                        found.classList.add("downloaded");
+                        found.style.color = "#23f242";
+                        found.style.fontWeight = "bold";
                     }
                 });
-                // Actualiza log de archvos descargados
                 document.getElementById("responseBox").innerHTML += `<b>Finalizado:</b><br>
                 <ul>${
                   (resp.downloaded||[]).map(f=>`<li style='color:#23f242;font-weight:bold'>${f.split('/').pop()}</li>`).join('')
