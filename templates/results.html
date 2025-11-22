@@ -30,7 +30,7 @@
                 <div style="margin-bottom:14px;">
                     <label style="font-weight:bold">
                         <input type="checkbox" class="season" data-season="{{s}}" onclick="toggleSeason(this)">
-                        Season {{s}}
+                        Season {{'%02d'|format(s|int) if s.isdigit() else s }}
                     </label>
                     <div style="margin-left:24px;">
                         {% for ep in episodes %}
@@ -92,7 +92,6 @@
         })
         .then(r=>r.json())
         .then(resp=>{
-            // Pinta solo los que realmente acaba de descargar
             resp.downloaded.forEach(filePath => {
                 let fname = filePath.split('/').pop();
                 let found = Array.from(document.querySelectorAll('span')).find(x => x.textContent.trim() === fname);
