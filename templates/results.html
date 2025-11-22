@@ -35,10 +35,10 @@
                     <div style="margin-left:24px;">
                         {% for ep in episodes %}
                             <label>
-                                <input type="checkbox" name="episodes" value="{{ep.link}}" data-season="{{s}}"
+                                <input type="checkbox" name="episodes" value="{{ep.link}}" data-season="{{s}}" data-filename="{{ep.name}}"
                                     {% if ep.downloaded %}disabled checked class="disabled-check"{% endif %}>
                                 <span
-                                    id="ep_{{ loop.index0 }}_{{ s|replace(' ','_') }}"
+                                    id="ep_{{ ep.name|replace(' ','_')|replace('.','_') }}"
                                     {% if ep.downloaded %}class="downloaded"{% endif %}>
                                     {{ep.name}}
                                 </span>
@@ -51,6 +51,8 @@
         </form>
     </div>
     <script>
+    let pollingInterval = null;
+    
     function toggleSeason(seasonCheckbox) {
         var season = seasonCheckbox.getAttribute('data-season');
         var checked = seasonCheckbox.checked;
@@ -58,42 +60,43 @@
             if (!epCb.disabled) epCb.checked = checked;
         });
     }
-    function setEpisodeState(index, season, state) {
-        let elid = "ep_" + index + "_" + season.replace(/ /g,'_');
-        let span = document.getElementById(elid);
+    
+    function setEpisodeState(filename, state) {
+        let spanId = "ep_" + filename.replace(/ /g,'_').replace(/\./g,'_');
+        let span = document.getElementById(spanId);
         if(span && !span.classList.contains("downloaded")){
             span.classList.remove("waiting", "blinking", "downloaded");
             span.classList.add(state);
         }
     }
-    async function simulateDownload(checkedEpisodes, episodesAll, parallel) {
-        // Amarillo: en cola
-        checkedEpisodes.forEach((epCb, i) => {
-            let idx = episodesAll.indexOf(epCb);
-            let season = epCb.getAttribute('data-season');
-            setEpisodeState(idx, season, "waiting");
-            epCb.disabled = true;
-        });
-
-        let queue = checkedEpisodes.map((epCb,i) => ({
-            epCb: epCb,
-            idx: episodesAll.indexOf(epCb),
-            season: epCb.getAttribute('data-season')
-        }));
-
-        while (queue.length > 0) {
-            let batch = queue.splice(0, parallel);
-            // Azul blinking: descargando
-            batch.forEach(({idx,season})=>setEpisodeState(idx,season,"blinking"));
-            // Simula tiempo de descarga real (ajusta duración si deseas)
-            await new Promise(res => setTimeout(res, 2200));
-            // Verde bold: descargado
-            batch.forEach(({epCb,idx,season})=>{
-                setEpisodeState(idx,season,"downloaded");
-                epCb.disabled = true;
-            });
-        }
+    
+    function pollDownloadStatus() {
+        fetch("/download/status")
+            .then(r => r.json())
+            .then(status => {
+                // Marca episodios en cola como amarillo
+                status.queue.forEach(fname => setEpisodeState(fname, "waiting"));
+                
+                // Marca episodios descargando como azul blinking
+                status.downloading.forEach(fname => setEpisodeState(fname, "blinking"));
+                
+                // Marca episodios completados como verde
+                status.completed.forEach(fname => {
+                    setEpisodeState(fname, "downloaded");
+                    // Deshabilita checkbox
+                    let check = Array.from(document.querySelectorAll('input[name="episodes"]')).find(x => x.getAttribute('data-filename') === fname);
+                    if(check) check.disabled = true;
+                });
+                
+                // Si ya no está activo, detiene polling
+                if(!status.active && pollingInterval) {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                }
+            })
+            .catch(err => console.error("Error polling status:", err));
     }
+    
     function startDownload() {
         const form = document.getElementById('downloadForm');
         const episodesAll = Array.from(form.querySelectorAll('input[name="episodes"]'));
@@ -102,10 +105,12 @@
 
         if(checkedEpisodes.length === 0) return;
 
-        // Dispara la simulación visual
-        simulateDownload(checkedEpisodes, episodesAll, parallel);
+        // Deshabilita checkboxes seleccionados
+        checkedEpisodes.forEach(epCb => {
+            epCb.disabled = true;
+        });
 
-        // Dispara el backend real (descarga)
+        // Inicia el proceso de descarga
         fetch("/download", {
             method: "POST",
             headers: {"Content-Type":"application/json"},
@@ -118,21 +123,12 @@
         })
         .then(r=>r.json())
         .then(resp=>{
-            // Al terminar, asegura que todos terminan en verde y deshabilitados
-            resp.downloaded.forEach(filePath => {
-                let fname = filePath.split('/').pop();
-                let found = Array.from(document.querySelectorAll('span')).find(x => x.textContent.trim() === fname);
-                if(found){
-                    found.classList.remove("waiting", "blinking");
-                    found.classList.add("downloaded");
-                }
-            });
-            resp.downloaded.forEach(filePath => {
-                let fname = filePath.split('/').pop();
-                let check = Array.from(form.querySelectorAll('input[name=\"episodes\"]')).find(x => x.value.endsWith(fname));
-                if(check) check.disabled = true;
-            });
-        });
+            // Inicia polling cada 500ms
+            if(!pollingInterval) {
+                pollingInterval = setInterval(pollDownloadStatus, 500);
+            }
+        })
+        .catch(err => console.error("Error starting download:", err));
     }
     </script>
 </body>
