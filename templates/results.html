@@ -66,33 +66,32 @@
             span.classList.add(state);
         }
     }
-    async function processDownloads(checkedEpisodes, episodesAll, parallel, downloadResp) {
-        //...
-        const episodeOrder = checkedEpisodes.map(epCb => epCb.value.split('/').pop());
-        let queue = [...checkedEpisodes];
-        let active = [];
-        let downloaded = [];
+    async function simulateDownload(checkedEpisodes, episodesAll, parallel) {
+        // Amarillo: en cola
+        checkedEpisodes.forEach((epCb, i) => {
+            let idx = episodesAll.indexOf(epCb);
+            let season = epCb.getAttribute('data-season');
+            setEpisodeState(idx, season, "waiting");
+            epCb.disabled = true;
+        });
 
-        function sleep(ms){ return new Promise(res=>setTimeout(res,ms)); }
-        let total = queue.length;
-        while(downloaded.length < total) {
-            // Agrega a la cola parallel episodios en amarillo
-            active = [];
-            for(let i = 0; i < parallel && queue.length > 0; i++){
-                let epCb = queue.shift();
-                let idx = episodesAll.indexOf(epCb);
-                let season = epCb.getAttribute('data-season');
-                setEpisodeState(idx, season, "blinking");
-                active.push({epCb, idx, season});
-            }
-            // Espera a que estos se descarguen (simula, espera a que downloadResp indique terminado)
-            // En la vida real usaría websocket/polling del backend!
-            await sleep(1500); // Simulación visual
-            active.forEach(({epCb, idx, season})=>{
-                setEpisodeState(idx, season, "downloaded");
+        let queue = checkedEpisodes.map((epCb,i) => ({
+            epCb: epCb,
+            idx: episodesAll.indexOf(epCb),
+            season: epCb.getAttribute('data-season')
+        }));
+
+        while (queue.length > 0) {
+            let batch = queue.splice(0, parallel);
+            // Azul blinking: descargando
+            batch.forEach(({idx,season})=>setEpisodeState(idx,season,"blinking"));
+            // Simula tiempo de descarga real (ajusta duración si deseas)
+            await new Promise(res => setTimeout(res, 2200));
+            // Verde bold: descargado
+            batch.forEach(({epCb,idx,season})=>{
+                setEpisodeState(idx,season,"downloaded");
                 epCb.disabled = true;
             });
-            downloaded.push(...active);
         }
     }
     function startDownload() {
@@ -103,13 +102,10 @@
 
         if(checkedEpisodes.length === 0) return;
 
-        checkedEpisodes.forEach((epCb, i) => {
-            let idx = episodesAll.indexOf(epCb);
-            let season = epCb.getAttribute('data-season');
-            setEpisodeState(idx, season, "waiting");
-            epCb.disabled = true;
-        });
+        // Dispara la simulación visual
+        simulateDownload(checkedEpisodes, episodesAll, parallel);
 
+        // Dispara el backend real (descarga)
         fetch("/download", {
             method: "POST",
             headers: {"Content-Type":"application/json"},
@@ -121,9 +117,21 @@
             })
         })
         .then(r=>r.json())
-        .then(async resp=>{
-            // El orden en resp.downloaded es el orden procesado por backend (coincidiendo con checkedEpisodes)
-            await processDownloads(checkedEpisodes, episodesAll, parallel, resp);
+        .then(resp=>{
+            // Al terminar, asegura que todos terminan en verde y deshabilitados
+            resp.downloaded.forEach(filePath => {
+                let fname = filePath.split('/').pop();
+                let found = Array.from(document.querySelectorAll('span')).find(x => x.textContent.trim() === fname);
+                if(found){
+                    found.classList.remove("waiting", "blinking");
+                    found.classList.add("downloaded");
+                }
+            });
+            resp.downloaded.forEach(filePath => {
+                let fname = filePath.split('/').pop();
+                let check = Array.from(form.querySelectorAll('input[name=\"episodes\"]')).find(x => x.value.endsWith(fname));
+                if(check) check.disabled = true;
+            });
         });
     }
     </script>
