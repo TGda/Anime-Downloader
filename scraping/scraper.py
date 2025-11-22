@@ -10,6 +10,14 @@ import asyncio
 def clean_filename(name):
     return re.sub(r'[\\/*?:"<>|]', "", name).strip()
 
+def season_folder_name(season_val):
+    """Siempre devuelve Season XX (cero a la izquierda para números<10)"""
+    try:
+        num = int(season_val)
+        return f"Season {num:02d}"
+    except Exception:
+        return f"Season {season_val}".strip()
+
 def guess_season_from_url_or_title(url, node=None):
     m = re.search(r'Season[^\d]?(\d+)', url, re.I)
     if not m and node:
@@ -29,12 +37,13 @@ def find_mp4s_recursive(url, serie_root, season_hint=None):
     ]
     if mp4_links:
         season = season_hint or guess_season_from_url_or_title(url, soup)
+        folder_name = season_folder_name(season)
         episode_list = []
         for ep in mp4_links:
             ep_url = urljoin(url, ep['href'])
             ep_file = clean_filename(ep_url.split('/')[-1])
             ep_name = ep_file
-            dest = os.path.join(serie_root, f"Season {season}", ep_file)
+            dest = os.path.join(serie_root, folder_name, ep_file)
             episode_list.append({
                 "name": ep_name,
                 "link": ep_url,
@@ -76,8 +85,6 @@ def scrape_anime_data(url, download_root="/downloads"):
         "seasons": seasons
     }
 
-# download_selected_episodes (sin cambios previos, ya gestiona skip si existe en disco)
-
 async def download_file(url, dest):
     chunk_size = 1024 * 1024
     try:
@@ -107,7 +114,7 @@ def download_selected_episodes(main_url, folder, episodes, parallel=2):
     for ep_url in episodes:
         ep_file = clean_filename(ep_url.split('/')[-1])
         m = re.search(r'Season[^\d]?(\d+)', ep_url, re.I)
-        season_folder = f"Season {m.group(1)}" if m else ""
+        season_folder = season_folder_name(m.group(1)) if m else ""
         dest = os.path.join(serie_root, season_folder, ep_file)
         if os.path.exists(dest):
             skipped.append(dest)
