@@ -1,45 +1,74 @@
-from flask import Flask, request, render_template, jsonify
-import os
+from flask import Flask, render_template, request, jsonify
 from scraping.scraper import scrape_anime_data, download_selected_episodes
+import os
+import threading
 
 app = Flask(__name__)
+
+# Variable global para tracking de descargas en progreso
+download_status = {
+    "active": False,
+    "queue": [],
+    "downloading": [],
+    "completed": [],
+    "errors": []
+}
+download_lock = threading.Lock()
 
 DOWNLOAD_ROOT_DEFAULT = os.getenv("DOWNLOAD_FOLDER", "/downloads")
 PARALLEL_DEFAULT = int(os.getenv("PARALLEL_DOWNLOADS", 2))
 
-# Home page for URL input
-@app.route("/", methods=["GET", "POST"])
+@app.route("/")
 def index():
-    if request.method == "POST":
-        url = request.form["url"]
-        folder = request.form.get("dest", DOWNLOAD_ROOT_DEFAULT)
-        parallel = int(request.form.get("parallel", PARALLEL_DEFAULT))
-
-        # Scrape serie info (title, image, episodes/seasons)
-        serie_data = scrape_anime_data(url)
-
-        return render_template(
-            "results.html",
-            url=url,
-            folder=folder,
-            parallel=parallel,
-            serie=serie_data
-        )
     return render_template("index.html")
 
-# Endpoint to process selected downloads
+@app.route("/", methods=["POST"])
+def process():
+    url = request.form.get("url")
+    dest = request.form.get("dest", DOWNLOAD_ROOT_DEFAULT)
+    parallel = int(request.form.get("parallel", PARALLEL_DEFAULT))
+    
+    serie_data = scrape_anime_data(url, dest)
+    
+    return render_template("results.html", 
+                         serie=serie_data, 
+                         url=url, 
+                         folder=dest,
+                         parallel=parallel)
+
 @app.route("/download", methods=["POST"])
 def download():
     data = request.json
-    url = data["url"]
-    folder = data.get("folder", DOWNLOAD_ROOT_DEFAULT)
-    parallel = int(data.get("parallel", PARALLEL_DEFAULT))
-    selected_eps = data["episodes"]  # episode links or IDs
+    url = data.get("url")
+    folder = data.get("folder")
+    episodes = data.get("episodes", [])
+    parallel = data.get("parallel", PARALLEL_DEFAULT)
+    
+    # Inicializa el status
+    with download_lock:
+        download_status["active"] = True
+        download_status["queue"] = [ep.split('/')[-1] for ep in episodes]
+        download_status["downloading"] = []
+        download_status["completed"] = []
+        download_status["errors"] = []
+    
+    # Ejecuta descarga en thread separado
+    def download_thread():
+        result = download_selected_episodes(url, folder, episodes, parallel)
+        with download_lock:
+            download_status["active"] = False
+            download_status["completed"] = [f.split('/')[-1] for f in result.get("downloaded", [])]
+            download_status["errors"] = result.get("errors", [])
+    
+    threading.Thread(target=download_thread, daemon=True).start()
+    
+    return jsonify({"status": "started", "episodes": len(episodes)})
 
-    # Pass list of selected episodes
-    download_result = download_selected_episodes(url, folder, selected_eps, parallel)
-    return jsonify(download_result)
+@app.route("/download/status", methods=["GET"])
+def download_status_endpoint():
+    """Endpoint para polling del estado de descargas"""
+    with download_lock:
+        return jsonify(download_status)
 
 if __name__ == "__main__":
-    os.makedirs(DOWNLOAD_ROOT_DEFAULT, exist_ok=True)
-    app.run(port=5000, host="0.0.0.0")
+    app.run(host="0.0.0.0", port=5555, debug=True)
