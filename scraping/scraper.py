@@ -85,7 +85,7 @@ def scrape_anime_data(url, download_root="/downloads"):
         "seasons": seasons
     }
 
-async def download_file(url, dest):
+async def download_file(url, dest, status_callback=None):
     chunk_size = 1024 * 1024
     try:
         async with aiohttp.ClientSession() as session:
@@ -95,11 +95,15 @@ async def download_file(url, dest):
                 async with aiofiles.open(dest, 'wb') as f:
                     async for chunk in resp.content.iter_chunked(chunk_size):
                         await f.write(chunk)
+        if status_callback:
+            status_callback(dest, "completed")
         return dest, None
     except Exception as e:
+        if status_callback:
+            status_callback(dest, "error")
         return dest, str(e)
 
-def download_selected_episodes(main_url, folder, episodes, parallel=2):
+def download_selected_episodes(main_url, folder, episodes, parallel=2, status_callback=None):
     try:
         response = requests.get(main_url)
         soup = BeautifulSoup(response.text, "html.parser")
@@ -120,12 +124,22 @@ def download_selected_episodes(main_url, folder, episodes, parallel=2):
             skipped.append(dest)
         else:
             to_download.append((ep_url, dest))
+    
+    # Notifica callback de archivos en cola
+    if status_callback:
+        for _, dest in to_download:
+            status_callback(dest, "queued")
+    
     async def runner():
         sem = asyncio.Semaphore(parallel)
         async def sem_download(urldest):
+            url, dest = urldest
+            if status_callback:
+                status_callback(dest, "downloading")
             async with sem:
-                return await download_file(*urldest)
+                return await download_file(url, dest, status_callback)
         return await asyncio.gather(*(sem_download(pair) for pair in to_download))
+    
     results = asyncio.run(runner())
     result_ok = [d for d, err in results if err is None]
     result_fail = [(d, err) for d, err in results if err is not None]
